@@ -1,0 +1,254 @@
+<!-- email_confirmed.html  -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Email Verified ✅</title>
+  <link rel="stylesheet" href="/css/auth.css">
+  <script type="module">
+    import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+    const SUPABASE_URL = "https://ogbykbxfralllvyukpuk.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9nYnlrYnhmcmFsbGx2eXVrcHVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA1MDYzNzIsImV4cCI6MjA3NjA4MjM3Mn0.mKnh40g6I7-hBlmvtcAuSzUc9WJWDmgMdKCQnY2UKKE";
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    async function handleMagicLinkAuth() {
+      console.log("🔐 Starting magic link authentication...");
+      const statusEl = document.getElementById("status");
+
+      try {
+        // Check if URL contains magic link tokens (from hash)
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+
+        if (accessToken && refreshToken) {
+          console.log("📧 Magic link tokens found in URL, extracting session...");
+          
+          // Exchange tokens for session
+          const { data: { session }, error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken
+          });
+
+          if (sessionError) {
+            console.error("❌ Session error:", sessionError);
+            statusEl.innerHTML = `❌ <b>Error:</b> ${sessionError.message}<br><br><button onclick="location.href='login.html'">Back to Login</button>`;
+            return;
+          }
+
+          if (!session) {
+            console.error("❌ No session created");
+            statusEl.innerHTML = `❌ <b>Error:</b> Failed to create session.<br><br><button onclick="location.href='login.html'">Back to Login</button>`;
+            return;
+          }
+
+          console.log("✅ Session created successfully:", session.user.email);
+        } else {
+          // No tokens in URL, check for existing session
+          console.log("🔍 No tokens in URL, checking for existing session...");
+          const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+          if (sessionError || !session) {
+            console.error("❌ No active session");
+            statusEl.innerHTML = `❌ <b>No active session found.</b><br><br><button onclick="location.href='login.html'">Back to Login</button>`;
+            return;
+          }
+
+          console.log("✅ Existing session found:", session.user.email);
+        }
+
+        // Get current session after handling tokens
+        const { data: { session }, error: getSessionError } = await supabase.auth.getSession();
+        
+        if (getSessionError || !session) {
+          console.error("❌ Failed to get session:", getSessionError);
+          statusEl.innerHTML = `❌ <b>Error:</b> ${getSessionError?.message || 'Failed to get session'}<br><br><button onclick="location.href='login.html'">Back to Login</button>`;
+          return;
+        }
+
+        const email = session.user.email;
+        console.log("📧 User email:", email);
+
+        // Update voter registration status
+        console.log("📝 Updating voter registration status...");
+        const { data: updatedRows, error: updateError } = await supabase
+          .from('voters')
+          .update({ is_registered: true })
+          .eq('email', email)
+          .select();
+
+        if (updateError) {
+          console.error("❌ Database update error:", updateError);
+          statusEl.innerHTML = `❌ <b>Database Error:</b> ${updateError.message}<br><br><button onclick="location.href='login.html'">Back to Login</button>`;
+          return;
+        }
+
+        if (!updatedRows || updatedRows.length === 0) {
+          console.warn("⚠️ No voter record found for email:", email);
+          statusEl.innerHTML = `⚠️ <b>Warning:</b> No voter record found for this email.<br><br><button onclick="location.href='login.html'">Back to Login</button>`;
+          return;
+        }
+
+        console.log("✅ Voter registration updated successfully");
+
+        // Attempt to fund voter's wallet
+        await fundVoterWallet(email, statusEl);
+
+        // Show success message
+        statusEl.innerHTML = `✅ <b>Welcome ${email}!</b><br>Registration completed successfully.`;
+        
+        // Clean up URL hash after successful processing
+        if (window.location.hash) {
+          window.history.replaceState(null, '', window.location.pathname);
+        }
+        
+        // Create dashboard button
+        const dashboardBtn = document.createElement('button');
+        dashboardBtn.textContent = "Go to Dashboard";
+        dashboardBtn.style.marginTop = '20px';
+        dashboardBtn.style.padding = '12px 24px';
+        dashboardBtn.style.fontSize = '16px';
+        dashboardBtn.onclick = () => {
+          window.location.href = "dashboard.html";
+        };
+        statusEl.after(dashboardBtn);
+
+      } catch (error) {
+        console.error("❌ Unexpected error:", error);
+        statusEl.innerHTML = `❌ <b>Unexpected Error:</b> ${error.message || error}<br><br><button onclick="location.href='login.html'">Back to Login</button>`;
+      }
+    }
+
+    async function fundVoterWallet(email, statusEl) {
+      console.log("💰 Attempting to fund voter wallet...");
+      
+      try {
+        // Get voter's wallet address and funded flag
+        const { data: voter, error: voterError } = await supabase
+          .from('voters')
+          .select('metamask_address,is_funded')
+          .eq('email', email)
+          .maybeSingle();
+
+        if (voterError) {
+          console.error("❌ Error fetching voter:", voterError);
+          return;
+        }
+
+        if (!voter || !voter.metamask_address) {
+          console.log("⚠️ No wallet address on file for this voter");
+          const fundingStatus = document.createElement('div');
+          fundingStatus.style.margin = '15px 0';
+          fundingStatus.style.color = '#666';
+          fundingStatus.innerHTML = "ℹ️ <i>No wallet address found. Funding skipped.</i>";
+          statusEl.after(fundingStatus);
+          return;
+        }
+
+          // If the voter's record already marked funded, skip transfer
+          if (voter.is_funded) {
+            console.log('✅ Voter wallet already funded, skipping transfer');
+            const alreadyStatus = document.createElement('div');
+            alreadyStatus.style.margin = '15px 0';
+            alreadyStatus.style.color = '#0b3d91';
+            alreadyStatus.innerHTML = `✅ <b>Wallet already funded.</b>`;
+            statusEl.after(alreadyStatus);
+            return;
+          }
+
+        // Get admin private key if available (optional)
+        const adminPrivateKey = sessionStorage.getItem('adminPrivateKey');
+        console.log(adminPrivateKey ? "🔑 Using admin key from session" : "🔑 Using server-side admin key");
+
+        // Create funding status element
+        const fundingStatus = document.createElement('div');
+        fundingStatus.style.margin = '15px 0';
+        fundingStatus.innerHTML = "⏳ <b>Funding wallet...</b> 0.01 SepoliaETH";
+        statusEl.after(fundingStatus);
+
+        // Call funding endpoint
+        console.log("📡 Calling /fund endpoint...");
+        const res = await fetch('http://localhost:4000/fund', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: voter.metamask_address,
+            amount: '0.01',
+            ...(adminPrivateKey && { adminPrivateKey }) // Only include if available
+          })
+        });
+
+        const result = await res.json();
+        console.log("💰 Funding response:", result);
+
+        if (result.ok && result.funded) {
+          fundingStatus.innerHTML = `✅ <b>Wallet funded successfully!</b><br>0.01 SepoliaETH sent.<br><a href='https://sepolia.etherscan.io/tx/${result.tx}' target='_blank' style='color: #0b3d91; text-decoration: underline;'>View Transaction</a>`;
+          fundingStatus.style.color = '#0b3d91';
+
+          // Mark the voter as funded in Supabase (best-effort from client)
+          try {
+            console.log('🔁 Marking voter as funded in Supabase for email=', email);
+            // Prefer updating by email (we have it) to mark is_funded
+            const { data: updateData, error: updateError } = await supabase
+              .from('voters')
+              .update({ is_funded: true })
+              .eq('email', email);
+
+            if (updateError) {
+              console.warn('⚠️ Could not update is_funded from client:', updateError);
+            } else {
+              console.log('✅ Voter record updated from client:', updateData);
+            }
+          } catch (clientDbErr) {
+            console.warn('⚠️ Exception updating voter record from client:', clientDbErr?.message || clientDbErr);
+          }
+        } else {
+          fundingStatus.innerHTML = `⚠️ <b>Funding issue:</b> ${result.error || 'Unknown error'}`;
+          fundingStatus.style.color = '#d32f2f';
+        }
+
+      } catch (fundError) {
+        console.error("❌ Funding error:", fundError);
+        const fundingStatus = document.createElement('div');
+        fundingStatus.style.margin = '15px 0';
+        fundingStatus.style.color = '#d32f2f';
+        fundingStatus.innerHTML = `❌ <b>Funding failed:</b> ${fundError.message || fundError}`;
+        statusEl.after(fundingStatus);
+      }
+    }
+
+    // Handle magic link on page load
+    window.addEventListener("DOMContentLoaded", () => {
+      handleMagicLinkAuth();
+    });
+  </script>
+  <style>
+    #status { 
+      text-align: center; 
+      padding: 20px; 
+      font-size: 16px; 
+      line-height: 1.6;
+    }
+    button { 
+      background: #0b3d91; 
+      color: white; 
+      border: none; 
+      padding: 10px 20px; 
+      border-radius: 5px; 
+      cursor: pointer; 
+      font-size: 14px;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background: #0a2d6e;
+    }
+  </style>
+</head>
+<body>
+  <div class="form-container">
+    <h2>Email Verification Status</h2>
+    <div id="status">🔄 Processing login...</div>
+  </div>
+</body>
+</html>

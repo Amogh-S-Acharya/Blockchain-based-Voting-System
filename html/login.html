@@ -1,0 +1,201 @@
+<!-- login.html  -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>User Login</title>
+  <link rel="stylesheet" href="/css/auth.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet" />
+
+  <script type="module">
+    import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+    const SUPABASE_URL = "https://ogbykbxfralllvyukpuk.supabase.co";
+    const SUPABASE_ANON_KEY =
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9nYnlrYnhmcmFsbGx2eXVrcHVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA1MDYzNzIsImV4cCI6MjA3NjA4MjM3Mn0.mKnh40g6I7-hBlmvtcAuSzUc9WJWDmgMdKCQnY2UKKE";
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    window.supabase = supabase;
+
+    window.addEventListener("DOMContentLoaded", () => {
+      const emailInput = document.getElementById("emailInput");
+      const sendOtpBtn = document.getElementById("sendOtpBtn");
+
+      // SEND MAGIC LINK (unchanged)
+      sendOtpBtn.addEventListener("click", async () => {
+        const email = emailInput.value.trim();
+        if (!email) return alert("Please enter your registered email.");
+
+        console.log("📩 Sending magic link to:", email);
+
+        const { error } = await supabase.auth.signInWithOtp({
+          email,
+          options: {
+            redirectTo: "http://localhost:3000/html/email_confirmed.html",
+          },
+        });
+
+        if (error) {
+          console.error("Send OTP Error:", error.message);
+          alert("Failed to send magic link: " + error.message);
+          return;
+        }
+
+        alert("✅ Check your email for the login link!");
+      });
+
+      // Redirect if already logged in
+      supabase.auth.onAuthStateChange((event, session) => {
+        if (session) {
+          window.location.href = "dashboard.html";
+        }
+      });
+    });
+  </script>
+
+  <style>
+    #verifyResultBtn {
+      margin-left: 8px;
+      background-color: #0b3d91;
+      color: white;
+      border: none;
+      padding: 10px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    #verifyResultBtn:hover {
+      opacity: 0.85;
+    }
+
+    #checkEligibilityBtn {
+      margin-top: 10px;
+      background-color: #555;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    #checkEligibilityBtn:hover {
+      opacity: 0.85;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="form-container">
+    <h2>User Login 🔑</h2>
+
+    <div class="role-display" style="text-align:center;margin:15px 0;padding:15px;background:#e6eef9;border-radius:8px;border:1px solid #c3c9d5;">
+      <strong style="color:#0b3d91">Currently Logging in as:</strong>
+      <span id="currentRole" style="color:#0b3d91;font-weight:600;text-transform:capitalize"></span><br/>
+      <small style="color:#666">
+        Not correct?
+        <a href="role-selection.html" style="color:#0b3d91;font-weight:600">Change Role</a>
+      </small>
+    </div>
+
+    <!-- Login Form -->
+    <form id="loginForm">
+      <input id="emailInput" type="email" placeholder="Enter your registered email" required />
+
+      <div style="margin-top:10px;">
+      <button type="button" id="sendOtpBtn">Send Email to Vote</button>
+
+      <!-- NEW CHECK ELIGIBILITY BUTTON -->
+      <div style="margin-top:10px"></div>
+      <button type="button" id="checkEligibilityBtn">Check Eligibility to view Result</button>
+
+        <!-- FINAL VERIFICATION BUTTON -->
+        <button 
+          type="button" 
+          id="verifyResultBtn" 
+          style="display:none;"
+        >
+          View Results
+        </button>
+      </div>
+    </form>
+
+    <p>Not registered? <a href="register.html">Register here</a></p>
+  </div>
+
+  <script>
+    // Display current role
+    const userRole = sessionStorage.getItem("userRole") || "voter";
+    document.getElementById("currentRole").textContent =
+      userRole === "admin" ? "Administrator" : "Voter";
+  </script>
+
+  <!-- FINAL VERIFICATION LOGIC -->
+  <script>
+    (function () {
+      const emailInputEl = document.getElementById("emailInput");
+      const verifyBtn = document.getElementById("verifyResultBtn");
+      const checkEligibilityBtn = document.getElementById("checkEligibilityBtn");
+
+      async function updateVerifyButton(email) {
+        if (!email) {
+          verifyBtn.style.display = "none";
+          return;
+        }
+
+        try {
+          // 1. Check if voter exists
+          const { data: voter } = await supabase
+            .from("voters")
+            .select("id")
+            .eq("email", email)
+            .maybeSingle();
+
+          if (!voter) {
+            alert("❌ This email is not registered.");
+            verifyBtn.style.display = "none";
+            return;
+          }
+
+          // 2. Check if results are published
+          const { data: setting } = await supabase
+            .from("election_settings")
+            .select("results_published")
+            .limit(1)
+            .maybeSingle();
+
+          if (!setting || !setting.results_published) {
+            alert("❌ Results are not published yet.");
+            verifyBtn.style.display = "none";
+            return;
+          }
+
+          // SHOW BUTTON
+          verifyBtn.style.display = "inline-block";
+          alert("✅ You are eligible to view results.");
+
+        } catch (err) {
+          console.error("Eligibility check error:", err);
+          verifyBtn.style.display = "none";
+        }
+      }
+
+      // CHECK ELIGIBILITY BUTTON CLICK
+      checkEligibilityBtn.addEventListener("click", () => {
+        const email = emailInputEl.value.trim();
+        updateVerifyButton(email);
+      });
+
+      // Verify results → redirect
+      verifyBtn.addEventListener("click", () => {
+        const email = emailInputEl.value.trim();
+        // pass email as query param so result page can allow registered voters when published
+        const url = new URL(window.location.origin + '/html/result.html');
+        if (email) url.searchParams.set('email', email);
+        window.location.href = url.toString();
+      });
+
+    })();
+  </script>
+
+</body>
+</html>

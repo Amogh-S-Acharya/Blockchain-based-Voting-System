@@ -1,0 +1,28 @@
+[
+  {
+    "id": 1761658849281,
+    "aadhaar_no": "234532343211",
+    "name": "manu",
+    "mobile_no": "9380710847",
+    "dob": "2005-01-28",
+    "email": "manu@gmail.com",
+    "fingerprint_hash": "97c9e1a03d21d6e4611d800271590473f3935e8d0e167bc67f5c5a7ec3e604a8",
+    "has_voted": false,
+    "metamask_address": null,
+    "is_registered": false,
+    "created_at": "2025-10-28T13:40:49.281Z"
+  },
+  {
+    "id": 1761658777426,
+    "aadhaar_no": "123456789012",
+    "name": "Naveen",
+    "mobile_no": "9380710847",
+    "dob": "2005-01-28",
+    "email": "naveenknani2580@gmail.com",
+    "fingerprint_hash": "f3619ed4c1b37fc45212b55549f21d57089f0fe9aa7e165c41d5e3ab94e3e426",
+    "has_voted": false,
+    "metamask_address": null,
+    "is_registered": false,
+    "created_at": "2025-10-28T13:39:37.427Z"
+  }
+]

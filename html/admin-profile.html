@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Profile</title>
+  <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+  <header>
+    <div>
+      <strong>Admin Profile</strong>
+      <div class="muted">Blockchain Voting System</div>
+    </div>
+    <nav class="actions">
+      <button class="btn" id="backBtn">Back to Dashboard</button>
+      <button class="btn primary" id="signOutBtn">Sign Out</button>
+    </nav>
+  </header>
+
+  <div class="container">
+    <div id="profileCard" class="card profile-card"></div>
+  </div>
+
+  <script>
+    (function() {
+      const isAdminAuthenticated = sessionStorage.getItem('adminAuthenticated');
+      if (!isAdminAuthenticated) {
+        alert('Please login as admin first');
+        window.location.href = 'admin-login.html';
+        return;
+      }
+
+      const adminName = sessionStorage.getItem('adminName') || 'Admin';
+      const adminId = sessionStorage.getItem('adminId') || 'N/A';
+      const adminWallet = sessionStorage.getItem('adminWallet') || 'Not connected';
+      const adminEmail = sessionStorage.getItem('adminEmail') || 'N/A';
+
+      // Render profile cards
+      const card = document.getElementById('profileCard');
+      card.innerHTML = `
+        <div><strong>Administrator Profile</strong></div>
+        <div>Your account overview</div>
+        <div class="profile-sections">
+          <div class="profile-section">
+            <div class="section-title">Admin Details</div>
+            <div style="margin-top:10px">
+              <div><strong>Name:</strong> ${adminName}</div>
+              <div><strong>Admin ID:</strong> ${adminId}</div>
+              <div><strong>Email:</strong> ${adminEmail}</div>
+              <div><strong>Role:</strong> Administrator</div>
+            </div>
+          </div>
+          <div class="profile-section">
+            <div class="section-title">Admin Wallet</div>
+            <div style="margin-top:10px">
+              <div><strong>Address:</strong> <span style="font-family: monospace; word-break: break-all;">${adminWallet}</span></div>
+              <div class="muted" style="margin-top:6px">This wallet will be used to fund voter accounts.</div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Actions
+      document.getElementById('backBtn').addEventListener('click', () => {
+        window.location.href = 'admin.html';
+      });
+
+      document.getElementById('signOutBtn').addEventListener('click', () => {
+        sessionStorage.removeItem('adminAuthenticated');
+        sessionStorage.removeItem('adminId');
+        sessionStorage.removeItem('adminName');
+        sessionStorage.removeItem('adminWallet');
+        sessionStorage.removeItem('adminEmail');
+        window.location.href = 'role-selection.html';
+      });
+    })();
+  </script>
+</body>
+</html>
+
+

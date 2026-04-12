@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Select Your Role</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    /* Election window compact styling */
+    .election-window { margin:10px 0; padding:12px; border-radius:8px; background:#f8fbff; border:1px solid #e2eefc; color:#123; font-size:0.95em; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .ew-left { display:flex; flex-direction:column; gap:6px; }
+    .time-row { display:flex; gap:8px; align-items:center; }
+    .label { font-weight:600; color:#0b61a4; min-width:48px; }
+    .time-badge { background:#fff; border:1px solid #d3e9ff; padding:6px 10px; border-radius:6px; font-size:0.92em; color:#064a7a; }
+    .status-badge { padding:8px 14px; border-radius:999px; font-weight:700; font-size:0.9em; min-width:84px; text-align:center; }
+    .status-open { background:#e6ffef; color:#017a3a; border:1px solid #c6f1d4; }
+    .status-closed { background:#fff3f3; color:#922b21; border:1px solid #f3c4c4; }
+    .ew-sub { font-size:0.82em; color:#556; margin-top:4px; }
+    @media (max-width:520px){ .election-window{flex-direction:column; align-items:flex-start;} .status-badge{min-width:initial;} }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🗳️ Decentralized Voting System</h1>
+  </header>
+
+  <main style="flex: 1; display: flex; align-items: center; justify-content: center; padding: 20px;">
+    <div class="card">
+      <h2>Select your role to continue</h2>
+      <div id="electionWindowDisplay" class="election-window">Loading election window...</div>
+      <div class="btn-group">
+        <button onclick="selectRole('voter')" class="role-btn voter-btn">
+          🗳️ I'm a Voter
+          <br><small>Cast your vote securely</small>
+        </button>
+        <button onclick="selectRole('admin')" class="role-btn admin-btn">
+          ⚙️ I'm an Admin
+          <br><small>Manage election process</small>
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <p>⚡ Transparent • Secure • Blockchain-powered ⚡</p>
+  </footer>
+
+  <script>
+    function selectRole(role) {
+      // Store role in sessionStorage
+      sessionStorage.setItem('userRole', role);
+      
+      // Redirect to login page
+      if(role === 'voter') {
+        window.location.href = 'register.html';
+      } else if(role === 'admin') {
+      window.location.href = 'admin-login.html';
+      }
+    }
+  </script>
+  <script>
+    // Fetch and show election start/end on role selection page with styled badges
+    (function showElectionWindow(){
+      const el = document.getElementById('electionWindowDisplay');
+
+      function fmt(dt) {
+        if (!dt) return '—';
+        const d = String(dt.getDate()).padStart(2, '0');
+        const m = String(dt.getMonth() + 1).padStart(2, '0');
+        const y = dt.getFullYear();
+        const hh = String(dt.getHours()).padStart(2, '0');
+        const mm = String(dt.getMinutes()).padStart(2, '0');
+        return `${d}-${m}-${y} ${hh}:${mm}`;
+      }
+
+      async function fetchAndRender(){
+        try {
+          const res = await fetch('http://localhost:4000/api/election-window', { cache: 'no-store' });
+          if (!res.ok) { el.textContent = 'Could not load election window.'; return; }
+          const j = await res.json();
+
+          const start = j && j.data && j.data.start_time ? new Date(j.data.start_time) : null;
+          const end = j && j.data && j.data.end_time ? new Date(j.data.end_time) : null;
+          const now = j && j.now ? new Date(j.now) : new Date();
+
+          let open = false;
+          if (typeof j.open === 'boolean') open = j.open;
+          else if (start && end) open = now >= start && now <= end;
+
+          const startStr = start ? fmt(start) : '—';
+          const endStr = end ? fmt(end) : '—';
+          const statusClass = open ? 'status-open' : 'status-closed';
+          const statusText = open ? 'OPEN' : 'CLOSED';
+
+          el.innerHTML = `
+            <div class="ew-left">
+              <div class="time-row"><span class="label">Starts</span><span class="time-badge">${startStr}</span></div>
+              <div class="time-row"><span class="label">Ends</span><span class="time-badge">${endStr}</span></div>
+            </div>
+            <div class="ew-right">
+              <div class="status-badge ${statusClass}">${statusText}</div>
+            </div>
+          `;
+        } catch (err) {
+          console.warn('Could not fetch election window', err);
+          el.textContent = 'Could not load election window.';
+        }
+      }
+
+      fetchAndRender();
+      setInterval(fetchAndRender, 15000);
+    })();
+  </script>
+</body>
+</html>

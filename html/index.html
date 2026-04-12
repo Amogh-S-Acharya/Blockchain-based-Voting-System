@@ -1,0 +1,45 @@
+<!-- index.html  -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Decentralized Voting System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <header>
+    <h1>🗳️ Decentralized Voting System</h1>
+  </header>
+
+  <main>
+    <div class="card">
+      <h2>Welcome Voter 👋</h2>
+      <p>"Your vote is your voice"</p>
+      <div class="btn-group">
+        <button onclick="window.location.href='role-selection.html'">Get Started</button>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <p>⚡ Transparent • Secure • Blockchain-powered ⚡</p>
+  </footer>
+  <script type="module">
+  import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+  const supabase = createClient("https://ogbykbxfralllvyukpuk.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9nYnlrYnhmcmFsbGx2eXVrcHVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA1MDYzNzIsImV4cCI6MjA3NjA4MjM3Mn0.mKnh40g6I7-hBlmvtcAuSzUc9WJWDmgMdKCQnY2UKKE");
+
+  (async () => {
+    // If the magic-link put tokens in the URL fragment at site root, consume them
+    if (location.hash.includes('access_token')) {
+      try {
+        await supabase.auth.getSessionFromUrl({ storeSession: true });
+        window.location.href = "/html/dashboard.html";
+      } catch (e) {
+        console.error('Failed to parse session on root:', e);
+      }
+    }
+  })();
+</script>
+</body>
+</html>

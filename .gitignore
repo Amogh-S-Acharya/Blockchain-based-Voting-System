@@ -1,0 +1,28 @@
+# Dependencies
+# ---------------------------------
+node_modules/
+
+# Sensitive Information & Secrets
+# ---------------------------------
+# Ignore environment variables
+.env
+.env.local
+
+# Build Artifacts & Caches
+# ---------------------------------
+# Output from tools like Hardhat or Truffle
+/artifacts
+/cache
+/build
+
+# Log files
+# ---------------------------------
+*.log
+npm-debug.log*
+
+# OS & Editor specific files
+# ---------------------------------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

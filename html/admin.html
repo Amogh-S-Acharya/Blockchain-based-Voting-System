@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard</title>
+  <link rel="stylesheet" href="/css/admin.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <!-- React + Babel (for in-browser TypeScript/TSX transpilation) -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Supabase JS v2 (ESM via esm.sh wrapped for UMD import through dynamic import in TSX) -->
+  <script type="module">
+    // expose a dynamic import helper for supabase-js to the TSX runtime
+    window.__importSupabase = async () => (await import('https://esm.sh/@supabase/supabase-js@2')).createClient;
+  </script>
+  <!-- Election Schedule Modal -->
+  <div id="electionScheduleModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); align-items:center; justify-content:center; z-index:9999;">
+    <div style="background:white; padding:20px; border-radius:8px; width:320px; max-width:90%; box-shadow:0 6px 24px rgba(0,0,0,0.2);">
+      <h3 style="margin-top:0;">Set Election Window</h3>
+      <label style="font-size:0.9em">Start</label>
+      <input id="electionStartInput" type="datetime-local" style="width:100%; margin:6px 0 12px;" />
+      <label style="font-size:0.9em">End</label>
+      <input id="electionEndInput" type="datetime-local" style="width:100%; margin:6px 0 12px;" />
+      <div id="electionScheduleStatus" style="font-size:0.9em; color:#333; min-height:20px; margin-bottom:8px;"></div>
+      <div style="display:flex; gap:8px; justify-content:flex-end;">
+        <button id="cancelElectionBtn" class="btn">Cancel</button>
+        <button id="saveElectionBtn" class="btn primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Expose modal controls to global scope so React button can open it
+    window.openScheduleModal = function() {
+      const modal = document.getElementById('electionScheduleModal');
+      modal.style.display = 'flex';
+      // try to prefill with current server values
+      // helper: convert a Date to a local 'YYYY-MM-DDTHH:MM' string for datetime-local input
+      function toLocalInputValue(d){
+        if (!d) return '';
+        // shift by timezone offset so the input shows local time
+        const tzOffset = d.getTimezoneOffset() * 60000;
+        const local = new Date(d.getTime() - tzOffset);
+        return local.toISOString().slice(0,16);
+      }
+
+      fetch('http://localhost:4000/api/election-window', { cache: 'no-store' })
+        .then(r => r.json())
+        .then(j => {
+          if (j && j.ok && j.data) {
+            try {
+              const s = j.data.start_time ? new Date(j.data.start_time) : null;
+              const e = j.data.end_time ? new Date(j.data.end_time) : null;
+              if (s) document.getElementById('electionStartInput').value = toLocalInputValue(s);
+              if (e) document.getElementById('electionEndInput').value = toLocalInputValue(e);
+            } catch (err) { /* ignore */ }
+          }
+        }).catch(()=>{});
+    };
+
+    window.closeScheduleModal = function() {
+      document.getElementById('electionScheduleModal').style.display = 'none';
+    };
+
+    document.getElementById('cancelElectionBtn').addEventListener('click', (e) => { e.preventDefault(); window.closeScheduleModal(); });
+
+    document.getElementById('saveElectionBtn').addEventListener('click', async (e) => {
+      e.preventDefault();
+      const statusEl = document.getElementById('electionScheduleStatus');
+      const startVal = document.getElementById('electionStartInput').value;
+      const endVal = document.getElementById('electionEndInput').value;
+      if (!startVal || !endVal) { statusEl.textContent = 'Please enter both start and end times.'; return; }
+      const startIso = new Date(startVal).toISOString();
+      const endIso = new Date(endVal).toISOString();
+      if (new Date(startIso) >= new Date(endIso)) { statusEl.textContent = 'Start must be before end.'; return; }
+
+      statusEl.textContent = 'Saving...';
+      try {
+        const headers = { 'Content-Type': 'application/json' };
+        const adminSecret = sessionStorage.getItem('adminApiSecret');
+        if (adminSecret) headers['x-admin-secret'] = adminSecret;
+        const res = await fetch('http://localhost:4000/api/admin/set-election', {
+          method: 'POST', headers, body: JSON.stringify({ start_time: startIso, end_time: endIso, label: 'main' })
+        });
+        const j = await res.json();
+        if (j && j.ok) {
+          statusEl.textContent = 'Saved successfully';
+          setTimeout(() => { window.closeScheduleModal(); statusEl.textContent = ''; }, 700);
+        } else {
+          statusEl.textContent = (j && j.message) ? j.message : 'Save failed';
+        }
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = 'Network error';
+      }
+    });
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react">
+    // --- Config ---
+    const SUPABASE_URL = 'https://ogbykbxfralllvyukpuk.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9nYnlrYnhmcmFsbGx2eXVrcHVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA1MDYzNzIsImV4cCI6MjA3NjA4MjM3Mn0.mKnh40g6I7-hBlmvtcAuSzUc9WJWDmgMdKCQnY2UKKE';
+
+    // Contract config used by admin actions (must be contract owner in MetaMask to succeed)
+    const CONTRACT_ADDRESS = '0x1A67f38D791C29E98F2b3318Cd2E687bc9461E32';
+    const SIMPLE_CONTRACT_ABI = [
+      { "inputs": [], "name": "resetElection", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
+      { "inputs": [{"internalType":"bool","name":"_active","type":"bool"}], "name": "setElectionStatus", "outputs": [], "stateMutability": "nonpayable", "type": "function" }
+    ];
+
+    // Authentication check
+    const isAdminAuthenticated = sessionStorage.getItem('adminAuthenticated');
+    if (!isAdminAuthenticated) {
+        alert("Please login as admin first");
+        window.location.href = 'admin-login.html';
+    }
+
+    function Header({ onSignOut, adminName, adminId }) {
+      return (
+        <header>
+          <div>
+            <strong>Admin Dashboard</strong>
+            <div className="muted">Blockchain Voting System</div>
+            <div className="admin-info">
+              <small>Logged in as: <strong>{adminName}</strong> (ID: {adminId})</small>
+            </div>
+          </div>
+          <nav className="actions">
+            <button className="btn" onClick={() => (window.location.href = 'admin-profile.html')}>Profile</button>
+            <button className="btn primary" onClick={onSignOut}>Sign Out</button>
+          </nav>
+        </header>
+      );
+    }
+
+    function Dashboard() {
+      const [loading, setLoading] = React.useState(false);
+      const [error, setError] = React.useState(null);
+      const [candidates, setCandidates] = React.useState([]);
+      
+      // Get admin info from session storage
+      const adminName = sessionStorage.getItem('adminName') || 'Admin';
+      const adminId = sessionStorage.getItem('adminId') || 'N/A';
+      const adminWallet = sessionStorage.getItem('adminWallet') || 'Not connected';
+
+      const signOut = () => {
+        // Clear admin session
+        sessionStorage.removeItem('adminAuthenticated');
+        sessionStorage.removeItem('adminId');
+        sessionStorage.removeItem('adminName');
+        sessionStorage.removeItem('adminWallet');
+        
+        // Redirect to role selection
+        window.location.href = 'role-selection.html';
+      };
+
+      const load = React.useCallback(async () => {
+        setLoading(true); setError(null);
+        try {
+          const createClient = await window.__importSupabase();
+          const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+          const { data, error } = await supabase.from('candidates').select('id,candidate_name,party_name,symbol_url').order('created_at', { ascending: false });
+          if (error) throw error;
+          setCandidates(data || []);
+        } catch (e) {
+          setError((e && e.message) ? e.message : 'Failed to load');
+        } finally {
+          setLoading(false);
+        }
+      }, []);
+
+      // Admin-only: Reset election on-chain (owner account required in MetaMask)
+      const handleResetElection = async () => {
+        if (!window.ethereum) {
+          alert('MetaMask not detected. Install MetaMask to perform on-chain actions.');
+          return;
+        }
+
+        if (!confirm('Confirm: Reset the on-chain election now? This requires the contract owner MetaMask account.')) return;
+
+        try {
+          const web3Provider = new ethers.providers.Web3Provider(window.ethereum);
+          await web3Provider.send('eth_requestAccounts', []);
+          const signer = web3Provider.getSigner();
+          const contract = new ethers.Contract(CONTRACT_ADDRESS, SIMPLE_CONTRACT_ABI, signer);
+
+          // Send resetElection transaction
+          const tx = await contract.resetElection();
+          await tx.wait();
+
+          // Try to re-activate the election immediately
+          try {
+            const tx2 = await contract.setElectionStatus(true);
+            await tx2.wait();
+          } catch (e) {
+            console.warn('Failed to auto-reactivate election after reset:', e.message || e);
+          }
+
+          // Unpublish results in Supabase (best-effort via anon key)
+          try {
+            const createClient = await window.__importSupabase();
+            const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            const { data: setting } = await supabase.from('election_settings').select('id').limit(1).maybeSingle();
+            if (setting && setting.id) {
+              await supabase.from('election_settings').update({ results_published: false }).eq('id', setting.id);
+            } else {
+              await supabase.from('election_settings').insert([{ results_published: false }]);
+            }
+          } catch (e) {
+            console.warn('Could not unpublish results after reset:', e.message || e);
+          }
+
+          alert('✅ Election reset on-chain (transaction confirmed).');
+          // Refresh data/UI
+          load();
+        } catch (err) {
+          console.error('Reset failed:', err);
+          alert('Failed to reset election: ' + (err.message || err));
+        }
+      };
+
+      React.useEffect(() => { load(); }, [load]);
+
+      return (
+        <>
+          <Header onSignOut={signOut} adminName={adminName} adminId={adminId} />
+          <div className="container">
+            <h2>Election Commission</h2>
+            <div className="action-buttons">
+              <button className="btn big" onClick={() => (window.location.href = 'candidatesPanel.html')}>Add Candidates</button>
+              <button className="btn big" onClick={() => (window.location.href = 'votersPanel.html')}>Add Voters</button>
+              <button className="btn big" onClick={handleResetElection}>Reset Election</button>
+              <button className="btn big" onClick={() => (window.location.href = 'result.html')}>Results</button>
+              <button className="btn big" onClick={() => (window.location.href = 'admin-analysis.html')}>Analysis</button>
+              <button className="btn big" onClick={() => (window.openScheduleModal && window.openScheduleModal())}>Set Election Window</button>
+              
+              </div>
+            {error && <div className="muted">{error}</div>}
+            {loading && <div className="muted">Loading…</div>}
+            <div className="grid">
+              {candidates.map(c => (
+                <div key={c.id} className="card">
+                  <div><strong>{c.party_name}</strong></div>
+                  <div style={{ marginTop: 8 }}>
+                    <img src={c.symbol_url} alt={c.party_name} />
+                  </div>
+                  <div className="muted">{c.candidate_name}</div>
+                </div>
+              ))}
+              {(!loading && candidates.length === 0) && (
+                <div className="muted">No candidates found.</div>
+              )}
+            </div>
+
+            
+          </div>
+        </>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<Dashboard />);
+  </script>
+</body>
+</html>

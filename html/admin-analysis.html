@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin Analysis</title>
+  <link rel="stylesheet" href="/css/admin.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body{font-family:Inter, Poppins, sans-serif; padding:18px;}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .card{background:white;padding:12px;border-radius:8px;border:1px solid #eee}
+    .kpi{display:flex;gap:12px;align-items:center}
+    .kpi .num{font-size:1.6rem;font-weight:700}
+    .controls{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+  </style>
+</head>
+<body>
+  <h1>Admin Analysis</h1>
+  <div class="controls">
+    <button onclick="location.href='admin.html'">← Back</button>
+    <label>Polling (sec): <input id="pollSec" type="number" value="20" style="width:80px" /></label>
+    <button id="refreshBtn">Refresh</button>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Participation Overview</h3>
+      <div class="kpi">
+        <div>
+          <div class="num" id="totalRegistered">-</div>
+          <div>Registered</div>
+        </div>
+        <div>
+          <div class="num" id="totalVoted">-</div>
+          <div>Voted</div>
+        </div>
+        <div>
+          <div class="num" id="participation">- %</div>
+          <div>Participation</div>
+        </div>
+      </div>
+      <canvas id="participationChart" height="160"></canvas>
+    </div>
+
+    <div class="card">
+      <h3>MetaMask Transaction Metrics</h3>
+      <canvas id="txChart" height="160"></canvas>
+      <div id="txNote" style="font-size:0.9em;color:#666;margin-top:8px"></div>
+    </div>
+
+    <div class="card" style="grid-column: 1 / -1">
+      <h3>Candidate Vote Distribution</h3>
+      <canvas id="candidateChart" height="240"></canvas>
+    </div>
+
+    <div class="card" style="grid-column: 1 / -1">
+      <h3>Voting Timeline</h3>
+      <div style="margin-bottom:8px"><label>Scale: <select id="timelineScale"><option value="hour">Hour</option><option value="day">Day</option></select></label></div>
+      <canvas id="timelineChart" height="200"></canvas>
+    </div>
+  </div>
+
+  <script>
+    const apiBase = 'http://localhost:4000';
+    const adminSecret = sessionStorage.getItem('adminApiSecret');
+    const headers = adminSecret ? { 'x-admin-secret': adminSecret } : {};
+
+    let participationChart, candidateChart, timelineChart, txChart;
+
+    function safeJson(res){ if(!res.ok) throw new Error('Network response not ok'); return res.json(); }
+
+    async function loadSummary(){
+      const res = await fetch(apiBase + '/api/admin/analysis/summary', { headers });
+      const j = await safeJson(res);
+      if(!j.ok) throw new Error(j.message || 'Failed');
+      const d = j.data;
+      document.getElementById('totalRegistered').textContent = d.total_registered;
+      document.getElementById('totalVoted').textContent = d.total_voted;
+      document.getElementById('participation').textContent = d.participation_percentage + ' %';
+
+      const voted = d.total_voted || 0;
+      const notVoted = Math.max((d.total_registered || 0) - voted, 0);
+      const ctx = document.getElementById('participationChart').getContext('2d');
+      if(participationChart) participationChart.data.datasets[0].data = [voted, notVoted];
+      else participationChart = new Chart(ctx, { type: 'doughnut', data: { labels: ['Voted','Not Voted'], datasets:[{ data:[voted, notVoted], backgroundColor:['#16a34a','#e5e7eb'] }] } });
+    }
+
+    async function loadTxMetrics(){
+      const res = await fetch(apiBase + '/api/admin/analysis/tx-metrics', { headers });
+      const j = await safeJson(res);
+      if(!j.ok) throw new Error(j.message || 'Failed');
+      const d = j.data;
+      document.getElementById('txNote').textContent = d.note || '';
+      const success = d.success || 0;
+      const failed = d.failed || 0;
+      const pending = d.pending || 0;
+      const ctx = document.getElementById('txChart').getContext('2d');
+      if(txChart) txChart.data.datasets[0].data = [success, failed || 0, pending || 0];
+      else txChart = new Chart(ctx, { type: 'doughnut', data: { labels:['Success','Failed','Pending'], datasets:[{ data:[success, failed || 0, pending || 0], backgroundColor:['#10b981','#ef4444','#f59e0b'] }] } });
+    }
+
+    async function loadCandidates(){
+      const res = await fetch(apiBase + '/api/admin/analysis/votes-per-candidate', { headers });
+      const j = await safeJson(res);
+      if(!j.ok) throw new Error(j.message || 'Failed');
+      const rows = j.data || [];
+      const labels = rows.map(r => r.candidate_name || `#${r.candidate_id}`);
+      const data = rows.map(r => r.vote_count || 0);
+      const ctx = document.getElementById('candidateChart').getContext('2d');
+      if(candidateChart) { candidateChart.data.labels = labels; candidateChart.data.datasets[0].data = data; }
+      else candidateChart = new Chart(ctx, { type: 'bar', data: { labels, datasets:[{label:'Votes',data,backgroundColor:'#2563eb'}] }, options:{indexAxis:'y'} });
+    }
+
+    async function loadTimeline(){
+      const scale = document.getElementById('timelineScale').value;
+      const res = await fetch(apiBase + '/api/admin/analysis/vote-timeline?scale=' + encodeURIComponent(scale), { headers });
+      const j = await safeJson(res);
+      if(!j.ok) throw new Error(j.message || 'Failed');
+      const rows = j.data || [];
+      const labels = rows.map(r=>r.bucket);
+      const data = rows.map(r=>r.votes);
+      const ctx = document.getElementById('timelineChart').getContext('2d');
+      if(timelineChart) { timelineChart.data.labels = labels; timelineChart.data.datasets[0].data = data; }
+      else timelineChart = new Chart(ctx, { type: 'line', data: { labels, datasets:[{label:'Votes',data,fill:false,borderColor:'#0ea5e9'}] } });
+    }
+
+    async function refreshAll(){
+      try{
+        await Promise.all([loadSummary(), loadTxMetrics(), loadCandidates(), loadTimeline()]);
+      }catch(e){ console.error('Refresh failed', e); }
+    }
+
+    document.getElementById('refreshBtn').addEventListener('click', refreshAll);
+    document.getElementById('timelineScale').addEventListener('change', loadTimeline);
+
+    // polling
+    let pollTimer = null;
+    function startPolling(){
+      const sec = Math.max(5, Number(document.getElementById('pollSec').value || 20));
+      if(pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(loadSummary, sec*1000);
+    }
+
+    document.getElementById('pollSec').addEventListener('change', startPolling);
+
+    // initial load
+    refreshAll().then(startPolling);
+  </script>
+</body>
+</html>

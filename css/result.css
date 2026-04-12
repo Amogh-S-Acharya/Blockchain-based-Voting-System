@@ -1,0 +1,340 @@
+/* Results Page Specific Styles */
+
+.results-container {
+  max-width: 800px;
+  margin: 20px auto;
+  padding: 0;
+}
+
+.result-bar-container {
+  margin: 25px 0;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+  border: 1px solid rgba(11, 61, 145, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.result-bar-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: linear-gradient(180deg, #0b3d91, #3f6ab8);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.result-bar-container:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+
+.result-bar-container:hover::before {
+  opacity: 1;
+}
+
+.result-bar-container.winner {
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 223, 0, 0.05));
+  border: 2px solid rgba(255, 215, 0, 0.3);
+  box-shadow: 0 6px 25px rgba(255, 215, 0, 0.2);
+}
+
+.result-bar-container.winner::before {
+  background: linear-gradient(180deg, #ffd700, #ffed4e);
+  opacity: 1;
+  width: 5px;
+}
+
+.result-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  font-weight: 600;
+  color: #1f2a44;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.result-label span:first-child {
+  font-size: 1.1rem;
+  color: #0b3d91;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.result-label span:last-child {
+  font-size: 1rem;
+  color: #3f6ab8;
+  background: rgba(11, 61, 145, 0.1);
+  padding: 6px 12px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.result-bar-bg {
+  width: 100%;
+  background: linear-gradient(90deg, #e6eef9, #f0f5fb);
+  border-radius: 12px;
+  height: 32px;
+  overflow: hidden;
+  position: relative;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.result-bar-bg::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  animation: shine 2s infinite;
+}
+
+@keyframes shine {
+  0%, 100% { transform: translateX(-100%); }
+  50% { transform: translateX(100%); }
+}
+
+.result-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0b3d91, #3f6ab8, #5a7fb8);
+  background-size: 200% 100%;
+  width: 0%;
+  border-radius: 12px;
+  transition: width 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  box-shadow: 0 2px 8px rgba(11, 61, 145, 0.3);
+  animation: gradient-shift 3s ease infinite;
+}
+
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.result-bar-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  animation: fill-shine 2s infinite;
+}
+
+@keyframes fill-shine {
+  0%, 100% { transform: translateX(-100%) skewX(-15deg); }
+  50% { transform: translateX(200%) skewX(-15deg); }
+}
+
+.overall-results {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(240, 245, 251, 0.98)) !important;
+  border: 2px solid rgba(11, 61, 145, 0.15);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1) !important;
+}
+
+.overall-results h2 {
+  background: linear-gradient(135deg, #0b3d91, #3f6ab8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-size: 1.8rem;
+  margin-bottom: 25px;
+  font-weight: 700;
+  position: relative;
+  padding-bottom: 15px;
+}
+
+.overall-results h2::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60px;
+  height: 4px;
+  background: linear-gradient(90deg, #0b3d91, #3f6ab8);
+  border-radius: 2px;
+}
+
+/* Total Votes Container */
+.total-votes-container {
+  text-align: center;
+  margin-top: 40px;
+  padding: 25px;
+  background: linear-gradient(135deg, rgba(11, 61, 145, 0.1), rgba(63, 106, 184, 0.05));
+  border-radius: 16px;
+  border: 2px solid rgba(11, 61, 145, 0.2);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+}
+
+.total-votes-container strong {
+  font-size: 1.5rem;
+  color: #0b3d91;
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+
+.total-votes-container p {
+  margin-top: 10px;
+  color: #555;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.total-votes-container p::before {
+  content: '🔗';
+  font-size: 1.1rem;
+}
+
+/* Blockchain Verified Badge */
+.blockchain-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 4px 10px;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 12px;
+  color: #15803d;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.blockchain-badge::before {
+  content: '✓';
+  font-weight: bold;
+  color: #15803d;
+}
+
+/* Winner Trophy */
+.winner-trophy {
+  font-size: 1.5rem;
+  filter: drop-shadow(0 2px 4px rgba(255, 215, 0, 0.5));
+  animation: bounce 2s infinite;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+/* Empty State */
+.empty-results {
+  text-align: center;
+  padding: 60px 20px;
+  color: #666;
+}
+
+.empty-results p:first-child {
+  font-size: 1.4rem;
+  margin-bottom: 10px;
+  color: #888;
+}
+
+.empty-results p:last-child {
+  font-size: 1rem;
+  color: #aaa;
+  font-style: italic;
+}
+
+/* Results Page Main Container */
+.results-main {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 30px 20px;
+  position: relative;
+  z-index: 1;
+}
+
+/* Responsive Design for Results */
+@media (max-width: 768px) {
+  .result-bar-container {
+    padding: 15px;
+    margin: 20px 0;
+  }
+  
+  .result-label {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  
+  .result-label span:last-child {
+    width: 100%;
+    text-align: left;
+  }
+  
+  .overall-results {
+    padding: 20px 15px !important;
+  }
+  
+  .overall-results h2 {
+    font-size: 1.5rem;
+  }
+  
+  .total-votes-container {
+    padding: 20px 15px;
+    margin-top: 30px;
+  }
+  
+  .total-votes-container strong {
+    font-size: 1.3rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .result-bar-container {
+    padding: 12px;
+    margin: 15px 0;
+  }
+  
+  .result-label span:first-child {
+    font-size: 1rem;
+  }
+  
+  .result-label span:last-child {
+    font-size: 0.9rem;
+    padding: 5px 10px;
+  }
+  
+  .result-bar-bg {
+    height: 28px;
+  }
+  
+  .overall-results h2 {
+    font-size: 1.3rem;
+    margin-bottom: 12px;
+  }
+  
+  .total-votes-container {
+    padding: 15px;
+  }
+  
+  .total-votes-container strong {
+    font-size: 1.2rem;
+  }
+  
+  .blockchain-badge {
+    font-size: 0.8rem;
+    padding: 3px 8px;
+  }
+}
+

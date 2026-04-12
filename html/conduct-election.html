@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conduct Election</title>
+  <link rel="stylesheet" href="/css/candidates_panel.css">
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script type="module">
+    window.__importSupabase = async () => (await import('https://esm.sh/@supabase/supabase-js@2')).createClient;
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react">
+    const SUPABASE_URL = 'https://ogbykbxfralllvyukpuk.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9nYnlrYnhmcmFsbGx2eXVrcHVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA1MDYzNzIsImV4cCI6MjA3NjA4MjM3Mn0.mKnh40g6I7-hBlmvtcAuSzUc9WJWDmgMdKCQnY2UKKE';
+
+    if (!sessionStorage.getItem('adminAuthenticated')) {
+      alert('Please login as admin first');
+      window.location.href = 'admin-login.html';
+    }
+
+    function PageHeader() {
+      return (
+        <header>
+          <div>
+            <strong>Conduct Election</strong>
+            <div className="muted">Set election metadata</div>
+          </div>
+          <div>
+            <button className="btn" onClick={() => (window.location.href = 'admin.html')}>Back to Admin</button>
+          </div>
+        </header>
+      );
+    }
+
+    function ConductElectionForm() {
+      const [electionName, setElectionName] = React.useState('');
+      const [startDate, setStartDate] = React.useState('');
+      const [endDate, setEndDate] = React.useState('');
+      const [submitting, setSubmitting] = React.useState(false);
+      const [message, setMessage] = React.useState('');
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        setMessage('');
+
+        if (!electionName.trim()) {
+          setMessage('Please enter an election name');
+          return;
+        }
+        if (!startDate || !endDate) {
+          setMessage('Please select both start and end time');
+          return;
+        }
+        if (startDate >= endDate) {
+          setMessage('End time must be after start time');
+          return;
+        }
+
+        setSubmitting(true);
+        try {
+          const createClient = await window.__importSupabase();
+          const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+          // Count voters and candidates
+          const { count: votersCount } = await supabase
+            .from('voters').select('*', { count: 'exact', head: true });
+          const { count: candidatesCount } = await supabase
+            .from('candidates').select('*', { count: 'exact', head: true });
+
+          // SIMPLE STATUS CALCULATION THAT WORKS
+          const now = Date.now(); // Current timestamp in milliseconds
+          const startTimestamp = new Date(startDate).getTime(); // Convert to timestamp
+          const endTimestamp = new Date(endDate).getTime(); // Convert to timestamp
+
+          // Insert into election_meta
+          const { data, error } = await supabase
+            .from('election_meta')
+            .insert({
+              election_name: electionName.trim(),
+              start_date: startDate + ':00',
+              end_date: endDate + ':00',
+              total_voters: votersCount || 0,
+              total_candidates: candidatesCount || 0
+            })
+            .select('id')
+            .single();
+
+          if (error) throw error;
+
+          setMessage('✅ Election created successfully! Redirecting...');
+          setTimeout(() => window.location.href = 'admin.html', 1500);
+
+        } catch (err) {
+          setMessage('❌ Failed: ' + (err.message || 'Unknown error'));
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      return (
+        <div className="container">
+          <div className="card">
+            <div className="row">
+              <div style={{ flex: 1 }}>
+                <label>Election Name</label>
+                <input
+                  type="text"
+                  value={electionName}
+                  onChange={(e) => setElectionName(e.target.value)}
+                  placeholder="e.g., 2025 Student Council"
+                  disabled={submitting}
+                  required
+                />
+              </div>
+            </div>
+            <div className="row">
+              <div style={{ flex: 1 }}>
+                <label>Start Time</label>
+                <input
+                  type="datetime-local"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  disabled={submitting}
+                  required
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label>End Time</label>
+                <input
+                  type="datetime-local"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  disabled={submitting}
+                  required
+                />
+              </div>
+            </div>
+            <div className="row">
+              <button className="btn" type="button" onClick={() => (window.location.href = 'admin.html')} disabled={submitting}>
+                Cancel
+              </button>
+              <button className="btn" type="button" onClick={handleSubmit} disabled={submitting}>
+                {submitting ? 'Creating...' : 'Create Election'}
+              </button>
+            </div>
+            {message && <div className="muted">{message}</div>}
+          </div>
+        </div>
+      );
+    }
+
+    function App() {
+      return (
+        <>
+          <PageHeader />
+          <ConductElectionForm />
+        </>
+      );
+    }
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
