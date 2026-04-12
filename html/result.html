@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voting Results</title>
+  <link rel="stylesheet" href="/css/dashboard.css">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script type="module">
+    import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+    const SUPABASE_URL = "https://ogbykbxfralllvyukpuk.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9nYnlrYnhmcmFsbGx2eXVrcHVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA1MDYzNzIsImV4cCI6MjA3NjA4MjM3Mn0.mKnh40g6I7-hBlmvtcAuSzUc9WJWDmgMdKCQnY2UKKE";
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    
+    // Contract details - must match dashboard.html
+    const CONTRACT_ADDRESS = "0x1A67f38D791C29E98F2b3318Cd2E687bc9461E32"; // Voting contract on Sepolia
+    const SEPOLIA_RPC_URL = "https://sepolia.infura.io/v3/7ce5241fd4a848e9959f3bf8d4545836";
+    
+    let votingContract = null;
+    let provider = null;
+    let userSession = null;
+    
+    // Simple contract ABI (for simple-voting.sol contract)
+    const SIMPLE_CONTRACT_ABI = [
+      {
+        "inputs": [{"internalType": "uint256", "name": "_candidateId", "type": "uint256"}],
+        "name": "getCandidateVoteCount",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "totalVotes",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [{"internalType": "address", "name": "_voter", "type": "address"}],
+        "name": "checkHasVoted",
+        "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
+        "stateMutability": "view",
+        "type": "function"
+      }
+    ];
+
+    async function init() {
+      console.log("📊 Loading voting results...");
+      
+      // Check for admin authentication - results are admin-only
+      const isAdminAuthenticated = sessionStorage.getItem('adminAuthenticated');
+      if (!isAdminAuthenticated) {
+        alert("⚠️ Admin access required to view results.\n\nPlease login as admin first.");
+        window.location.href = "admin-login.html";
+        return;
+      }
+      
+      // Check for active session and store it
+      const { data: { session } } = await supabase.auth.getSession();
+      userSession = session;
+      
+      // Initialize blockchain connection if available
+      if (typeof window.ethereum !== "undefined") {
+        try {
+          provider = new ethers.providers.Web3Provider(window.ethereum);
+          // Use SIMPLE_CONTRACT_ABI for the simple-voting contract
+          votingContract = new ethers.Contract(CONTRACT_ADDRESS, SIMPLE_CONTRACT_ABI, provider);
+          console.log("✅ Blockchain connected with simple-voting contract ABI");
+        } catch (error) {
+          console.warn("⚠️ Could not connect to blockchain:", error);
+        }
+      }
+
+      await loadResults();
+    }
+
+    async function loadResults() {
+      try {
+        // Step 1: Get all candidates from Supabase
+        const { data: candidates, error: candidatesError } = await supabase
+          .from("candidates")
+          .select("id, candidate_name, party_name, symbol_url")
+          .order("created_at", { ascending: true });
+
+        if (candidatesError) {
+          throw new Error("Failed to load candidates: " + candidatesError.message);
+        }
+
+        if (!candidates || candidates.length === 0) {
+          document.getElementById("results").innerHTML = "<p style='text-align:center;padding:20px;'>No candidates found.</p>";
+          return;
+        }
+
+        // Step 2: Get vote counts from Supabase (primary source)
+        const { data: votes, error: votesError } = await supabase
+          .from("votes")
+          .select("candidate_id");
+
+        if (votesError) {
+          console.warn("⚠️ Could not load votes from Supabase:", votesError);
+        }
+
+        // Count votes per candidate
+        const voteCounts = {};
+        if (votes) {
+          votes.forEach(vote => {
+            const candidateId = vote.candidate_id;
+            voteCounts[candidateId] = (voteCounts[candidateId] || 0) + 1;
+          });
+        }
+
+        // Step 3: Get candidate positions for blockchain mapping
+        const candidatePositions = {};
+        candidates.forEach((candidate, index) => {
+          candidatePositions[candidate.id] = index + 1; // 1-based position
+        });
+
+        // Step 4: Get blockchain vote counts (primary source of truth)
+        let blockchainVoteCounts = {};
+        let totalBlockchainVotes = 0;
+        if (votingContract) {
+          try {
+            console.log("📊 Fetching blockchain vote counts...");
+            
+            // Try to get total votes directly from contract first (public variable auto-generates getter)
+            try {
+              const contractTotalVotes = await votingContract.totalVotes();
+              totalBlockchainVotes = parseInt(contractTotalVotes.toString());
+              console.log(`📊 Contract total votes: ${totalBlockchainVotes}`);
+            } catch (e) {
+              console.warn("⚠️ Could not get total votes from contract:", e.message || e);
+            }
+            
+            // Get individual candidate vote counts
+            for (const candidate of candidates) {
+              const position = candidatePositions[candidate.id];
+              try {
+                const bcCount = await votingContract.getCandidateVoteCount(position);
+                const count = parseInt(bcCount.toString());
+                blockchainVoteCounts[candidate.id] = count;
+                console.log(`✅ Candidate ${candidate.candidate_name} (position ${position}): ${count} blockchain votes`);
+                
+                // If we didn't get total from contract, sum it up
+                if (totalBlockchainVotes === 0) {
+                  totalBlockchainVotes += count;
+                }
+              } catch (e) {
+                // Function might fail if contract doesn't have data or ABI mismatch
+                console.warn(`⚠️ Could not get blockchain count for candidate ${candidate.id}:`, e.message || e);
+              }
+            }
+            
+            // If we got total from contract, use it; otherwise use the sum
+            if (totalBlockchainVotes === 0 && Object.keys(blockchainVoteCounts).length > 0) {
+              totalBlockchainVotes = Object.values(blockchainVoteCounts).reduce((a, b) => a + b, 0);
+            }
+            
+            console.log(`📊 Final blockchain total: ${totalBlockchainVotes} votes`);
+          } catch (error) {
+            console.warn("⚠️ Could not fetch blockchain vote counts:", error);
+          }
+        }
+
+        // Step 5: Merge vote counts - prioritize blockchain, fall back to Supabase
+        // Use blockchain data if available, otherwise use Supabase
+        const finalVoteCounts = {};
+        if (totalBlockchainVotes > 0) {
+          // Blockchain is source of truth
+          candidates.forEach(candidate => {
+            finalVoteCounts[candidate.id] = blockchainVoteCounts[candidate.id] || 0;
+          });
+          console.log("✅ Using blockchain vote counts as primary source");
+        } else {
+          // Fall back to Supabase
+          candidates.forEach(candidate => {
+            finalVoteCounts[candidate.id] = voteCounts[candidate.id] || 0;
+          });
+          console.log("✅ Using Supabase vote counts (blockchain not available)");
+        }
+
+        // Step 6: Calculate total votes (prioritize blockchain)
+        const totalVotes = totalBlockchainVotes > 0 
+          ? totalBlockchainVotes 
+          : (votes ? votes.length : Object.values(voteCounts).reduce((a, b) => a + b, 0));
+
+        console.log(`📊 Final total votes: ${totalVotes} (Blockchain: ${totalBlockchainVotes}, Supabase: ${votes ? votes.length : 0})`);
+
+        // Step 7: Display results
+        displayResults(candidates, finalVoteCounts, totalVotes, blockchainVoteCounts);
+
+        // Step 8: Show user's vote if logged in
+        await showUserVote(userSession);
+
+      } catch (error) {
+        console.error("❌ Error loading results:", error);
+        document.getElementById("results").innerHTML = `
+          <div style="text-align:center;padding:20px;color:#d32f2f;">
+            <p>Error loading results: ${error.message}</p>
+          </div>
+        `;
+      }
+    }
+
+    function displayResults(candidates, voteCounts, totalVotes, blockchainVoteCounts) {
+      const resultsContainer = document.getElementById("results");
+      resultsContainer.innerHTML = "";
+
+      if (totalVotes === 0) {
+        resultsContainer.innerHTML = `
+          <div class="empty-results">
+            <p>No votes cast yet.</p>
+            <p>Be the first to vote!</p>
+          </div>
+        `;
+        return;
+      }
+
+      // Sort candidates by vote count (descending)
+      const sortedCandidates = candidates
+        .map(c => ({
+          ...c,
+          votes: voteCounts[c.id] || 0,
+          blockchainVotes: blockchainVoteCounts[c.id] || 0
+        }))
+        .sort((a, b) => b.votes - a.votes);
+
+      sortedCandidates.forEach((candidate, index) => {
+        const votes = candidate.votes || 0;
+        const percentage = totalVotes === 0 ? 0 : ((votes / totalVotes) * 100).toFixed(1);
+        
+        const barContainer = document.createElement("div");
+        barContainer.className = "result-bar-container";
+        
+        const isWinner = index === 0 && votes > 0;
+        
+        if (isWinner) {
+          barContainer.classList.add('winner');
+        }
+        
+        barContainer.innerHTML = `
+          <div style="display:flex;align-items:center;margin-bottom:12px;">
+            ${isWinner ? '<span class="winner-trophy" style="margin-right:8px;">🏆</span>' : ''}
+            <div style="flex:1;">
+              <div class="result-label">
+                <span><strong>${candidate.candidate_name}</strong> <span style="color:#888;font-weight:400;">(${candidate.party_name || 'Independent'})</span></span>
+                <span><strong>${votes}</strong> votes <span style="color:#666;">(${percentage}%)</span></span>
+              </div>
+            </div>
+          </div>
+          <div class="result-bar-bg">
+            <div class="result-bar-fill" style="width: 0%;"></div>
+          </div>
+          ${candidate.blockchainVotes > 0 ? `<div class="blockchain-badge">Blockchain verified: ${candidate.blockchainVotes} votes</div>` : ''}
+        `;
+        
+        resultsContainer.appendChild(barContainer);
+        
+        // Animate the bar
+        setTimeout(() => {
+          const fill = barContainer.querySelector(".result-bar-fill");
+          if (fill) {
+            fill.style.width = `${percentage}%`;
+          }
+        }, 100 * (index + 1));
+      });
+
+      // Show total votes
+      const totalContainer = document.createElement("div");
+      totalContainer.className = "total-votes-container";
+      const blockchainTotal = Object.values(blockchainVoteCounts).reduce((a, b) => a + b, 0);
+      totalContainer.innerHTML = `
+        <strong>Total Votes: ${totalVotes}</strong>
+        ${blockchainTotal > 0 ? 
+          `<p class="blockchain-badge" style="justify-content:center;margin-top:8px;">Blockchain Verified: ${blockchainTotal} votes</p>` : 
+          ''}
+      `;
+      resultsContainer.appendChild(totalContainer);
+    }
+
+    async function showUserVote(session) {
+      if (!session || !session.user) {
+        document.getElementById("myVote").innerHTML = "<em>Log in to see your vote</em>";
+        return;
+      }
+
+      try {
+        // Get user's vote from Supabase
+        const { data: userVotes, error: voteError } = await supabase
+          .from("votes")
+          .select("candidate_id, timestamp, transaction_hash")
+          .eq("voter_id", session.user.id)
+          .order("timestamp", { ascending: false })
+          .limit(1);
+
+        if (voteError || !userVotes || userVotes.length === 0) {
+          document.getElementById("myVote").innerHTML = "<em>No vote recorded</em>";
+          return;
+        }
+
+        const userVote = userVotes[0];
+        
+        // Get candidate details
+        const { data: candidate, error: candidateError } = await supabase
+          .from("candidates")
+          .select("candidate_name, party_name")
+          .eq("id", userVote.candidate_id)
+          .single();
+
+        if (candidateError || !candidate) {
+          document.getElementById("myVote").innerHTML = `<em>Voted (Candidate ID: ${userVote.candidate_id})</em>`;
+          return;
+        }
+
+        const voteDate = new Date(userVote.timestamp).toLocaleString();
+        document.getElementById("myVote").innerHTML = `
+          <div style="margin-top:10px;">
+            <strong>${candidate.candidate_name}</strong> (${candidate.party_name || 'Independent'})
+            <br>
+            <small style="color:#666;">Voted on: ${voteDate}</small>
+            ${userVote.transaction_hash ? 
+              `<br><small style="color:#666;">TX: <a href="https://sepolia.etherscan.io/tx/${userVote.transaction_hash}" target="_blank" style="color:#0b3d91;">${userVote.transaction_hash.substring(0,10)}...${userVote.transaction_hash.substring(58)}</a></small>` : 
+              ''}
+          </div>
+        `;
+      } catch (error) {
+        console.error("Error loading user vote:", error);
+        document.getElementById("myVote").innerHTML = "<em>Error loading your vote</em>";
+      }
+    }
+
+    function handleLogout() {
+      sessionStorage.removeItem('adminAuthenticated');
+      window.location.href = "admin-login.html";
+    }
+
+    // Initialize on page load
+    window.addEventListener("DOMContentLoaded", init);
+  </script>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Voting Results 📊</h1>
+      <nav style="margin-top:10px;">
+        <a href="admin.html" style="color:#fff;text-decoration:none;margin-right:15px;">← Back to Admin Panel</a>
+        <button onclick="handleLogout()" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);color:#fff;padding:6px 12px;border-radius:6px;cursor:pointer;">Logout</button>
+      </nav>
+    </div>
+  </header>
+
+  <main style="max-width:900px;margin:0 auto;padding:30px 20px;position:relative;z-index:1;">
+    <section class="your-vote" style="padding:25px;border-radius:16px;margin-bottom:25px;">
+      <h2>Your Vote</h2>
+      <p id="myVote" style="color:#555;line-height:1.6;">Loading...</p>
+    </section>
+
+    <section class="overall-results" style="padding:25px;border-radius:16px;">
+      <h2>Overall Results</h2>
+      <div id="results" class="results-container">
+        <div style="text-align:center;padding:40px;color:#888;">🔄 Loading results...</div>
+      </div>
+    </section>
+  </main>
+
+  <div class="quote">
+    <p>"Elections belong to the people. Your vote shapes the future."</p>
+  </div>
+</body>
+</html>
