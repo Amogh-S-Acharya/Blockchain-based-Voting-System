@@ -28,7 +28,7 @@ You must have the following software installed on your machine:
 
 1.  **Clone the repository:**
     ```bash
-    git clone [https://github.com/Amogh-S-Acharya/Minor-Project.git](https://github.com/Amogh-S-Acharya/Minor-Project.git)
+    git clone [https://github.com/Amogh-S-Acharya/Blockchain-based-Voting-System.git]
     ```
 
 2.  **Navigate into the project directory:**
