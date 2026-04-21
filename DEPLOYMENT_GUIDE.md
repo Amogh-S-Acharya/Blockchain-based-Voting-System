@@ -129,5 +129,5 @@ After deployment, verify it's working:
 3. Update `CONTRACT_ADDRESS` in `html/dashboard.html`
 4. Test voting in your dashboard
 
-Good luck! 🚀
+
 
